@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mein Sonnensystem-Simulator</title>
+<style>
+  :root { color-scheme: dark; --ink:#ecf3ff; --muted:#a8b7d2; --line:#2a3b5d; --accent:#89c7ff; }
+  * { box-sizing:border-box; }
+  body { margin:0; min-height:100vh; background:radial-gradient(ellipse at 50% 35%,#17294c 0,#0a1223 55%,#060b16 100%); color:var(--ink); font:16px/1.55 system-ui,sans-serif; }
+  main { width:min(1120px,94vw); margin:auto; padding:30px 0 46px; }
+  h1 { margin:0 0 6px; font-size:clamp(1.8rem,4vw,2.7rem); }
+  .intro { color:var(--muted); margin:0 0 20px; }
+  .layout { display:grid; grid-template-columns:minmax(0,1.5fr) minmax(280px,1fr); gap:18px; align-items:start; }
+  .card { background:linear-gradient(145deg,rgba(21,35,62,.96),rgba(13,23,42,.96)); border:1px solid var(--line); border-radius:18px; box-shadow:0 16px 40px #0004; overflow:hidden; }
+  .space { min-height:440px; height:min(66vh,620px); background:radial-gradient(ellipse at center,#101c34 0,#091225 72%); }
+  canvas { width:100%; height:100%; display:block; }
+  .controls { padding:20px; }
+  h2 { font-size:1.12rem; margin:0 0 12px; }
+  label { display:flex; justify-content:space-between; gap:12px; font-weight:650; }
+  output { color:var(--accent); font-variant-numeric:tabular-nums; }
+  input[type=range] { display:block; width:100%; margin:12px 0 4px; accent-color:#8bcaff; }
+  .buttons { display:flex; gap:10px; margin-top:18px; }
+  button { flex:1; border:1px solid #3b5680; color:var(--ink); background:#1b2d4d; border-radius:10px; padding:10px 12px; font:inherit; font-weight:700; cursor:pointer; }
+  button:hover { background:#263f68; }
+  .info { padding:18px; margin-top:18px; }
+  .info p { color:#c4d0e5; margin:0 0 12px; }
+  .info p:last-child { margin-bottom:0; }
+  .fact { border-left:3px solid #83c5ff; padding-left:12px; }
+  .planet-list { display:grid; grid-template-columns:1fr 1fr; gap:5px 12px; padding:0; margin:12px 0 0; list-style:none; font-size:.88rem; color:#cad6e9; }
+  .planet-list li { display:flex; justify-content:space-between; gap:6px; }
+  .planet-list span:last-child { color:var(--muted); white-space:nowrap; }
+  footer { color:#8293b1; font-size:.85rem; margin-top:18px; }
+  @media(max-width:780px) { .layout { grid-template-columns:1fr; } .space { min-height:350px; height:52vh; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Unser Sonnensystem ☀️</h1>
+  <p class="intro">Alle acht Planeten kreisen in der richtigen Reihenfolge um die Sonne. Verfolge ihre unterschiedlichen Umlaufzeiten.</p>
+  <div class="layout">
+    <section class="card" aria-label="Animation des Sonnensystems">
+      <div class="space"><canvas id="orbitCanvas" aria-label="Alle acht Planeten kreisen um die Sonne"></canvas></div>
+    </section>
+    <section class="card controls">
+      <h2>Steuere den Zeitlauf</h2>
+      <label for="speed">Animationsgeschwindigkeit <output id="speedValue">1,0×</output></label>
+      <input id="speed" type="range" min="0.2" max="3" value="1" step="0.1">
+      <div class="buttons">
+        <button id="pauseButton" type="button">⏸ Pause</button>
+        <button id="resetButton" type="button">↺ Zurücksetzen</button>
+      </div>
+      <ul class="planet-list" id="planetList" aria-label="Umlaufzeiten und mittlere Bahngeschwindigkeiten"></ul>
+      <div class="card info">
+        <h2>Was fällt dir auf?</h2>
+        <p id="explanation">Merkur ist am schnellsten unterwegs. Neptun braucht für eine Runde am längsten.</p>
+        <p class="fact"><strong>Physik-Idee:</strong> Je weiter ein Planet von der Sonne entfernt ist, desto länger dauert sein Umlauf. Die Planeten bewegen sich auf ihren Bahnen zugleich langsamer. Das folgt aus der Schwerkraft und Keplers Gesetzen.</p>
+      </div>
+    </section>
+  </div>
+  <footer>Die Umlaufzeiten und mittleren Bahngeschwindigkeiten sind reale Näherungswerte. Für die Darstellung sind die Bahnen zusammengedrückt und die Planetengrößen stark vergrößert; die Animation beschleunigt die Zeit.</footer>
+</main>
+<script>
+  // Daten: mittlere Entfernung (AE), Umlaufzeit (Erdtage) und Bahngeschwindigkeit.
+  // Die Werte sind gerundet; AE bedeutet Astronomische Einheit (mittlere Erde-Sonne-Distanz).
+  const planets = [
+    { name:'Merkur', au:0.387, days:88.0, velocity:47.4, color:'#b9a28d', size:3.4 },
+    { name:'Venus', au:0.723, days:224.7, velocity:35.0, color:'#f0c27b', size:4.7 },
+    { name:'Erde', au:1.000, days:365.2, velocity:29.8, color:'#72c5ff', size:5.0 },
+    { name:'Mars', au:1.524, days:687.0, velocity:24.1, color:'#f07858', size:4.1 },
+    { name:'Jupiter', au:5.203, days:4331, velocity:13.1, color:'#e7b88c', size:8.0 },
+    { name:'Saturn', au:9.537, days:10747, velocity:9.7, color:'#e8d09a', size:7.2 },
+    { name:'Uranus', au:19.19, days:30589, velocity:6.8, color:'#8ee3df', size:6.0 },
+    { name:'Neptun', au:30.07, days:59800, velocity:5.4, color:'#6e91ff', size:6.0 }
+  ];
+  const canvas = document.querySelector('#orbitCanvas');
+  const context = canvas.getContext('2d');
+  const speedSlider = document.querySelector('#speed');
+  const speedValue = document.querySelector('#speedValue');
+  const pauseButton = document.querySelector('#pauseButton');
+  let angles = planets.map((_, index) => index * 0.82);
+  let isPaused = false;
+  let lastTime = 0;
+
+  // Umlaufzeiten in Jahren lesbar ausgeben.
+  document.querySelector('#planetList').innerHTML = planets.map(planet => {
+    const years = planet.days / 365.25;
+    const time = years < 1 ? `${Math.round(planet.days)} Tg.` : `${years < 10 ? years.toFixed(1).replace('.', ',') : Math.round(years)} J.`;
+    return `<li><strong>${planet.name}</strong><span>${time} · ${planet.velocity} km/s</span></li>`;
+  }).join('');
+
+  function resizeCanvas() {
+    const pixelRatio = window.devicePixelRatio || 1;
+    const bounds = canvas.getBoundingClientRect();
+    canvas.width = bounds.width * pixelRatio;
+    canvas.height = bounds.height * pixelRatio;
+    context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+  }
+
+  function drawScene(time) {
+    const delta = lastTime ? Math.min((time - lastTime) / 1000, 0.05) : 0;
+    lastTime = time;
+    const width = canvas.clientWidth;
+    const height = canvas.clientHeight;
+    const centerX = width / 2;
+    const centerY = height / 2;
+    const maxRadius = Math.min(width, height) * 0.44;
+    const speed = Number(speedSlider.value);
+    context.clearRect(0, 0, width, height);
+
+    // Sterne mit festen Positionen im Hintergrund.
+    for (let i = 0; i < 65; i++) {
+      const x = (i * 97 + 31) % width;
+      const y = (i * 53 + 17) % height;
+      context.globalAlpha = i % 3 === 0 ? 0.75 : 0.38;
+      context.fillStyle = i % 4 === 0 ? '#b8d6ff' : '#64799d';
+      context.fillRect(x, y, i % 7 === 0 ? 2 : 1, i % 7 === 0 ? 2 : 1);
+    }
+    context.globalAlpha = 1;
+
+    // Logarithmische Skala: so passen auch die weit entfernten Planeten ins Bild.
+    // Die Reihenfolge bleibt korrekt, aber sichtbare Abstände sind nicht maßstabsgetreu.
+    const orbitRadius = planet => maxRadius * Math.log1p(planet.au) / Math.log1p(30.07);
+    planets.forEach(planet => {
+      context.beginPath();
+      context.arc(centerX, centerY, orbitRadius(planet), 0, Math.PI * 2);
+      context.strokeStyle = '#344b70';
+      context.lineWidth = 1;
+      context.setLineDash([3, 7]);
+      context.stroke();
+    });
+    context.setLineDash([]);
+
+    // Sonne
+    const glow = context.createRadialGradient(centerX, centerY, 2, centerX, centerY, 34);
+    glow.addColorStop(0, '#fff6c2');
+    glow.addColorStop(0.35, '#ffc95e');
+    glow.addColorStop(1, '#ff8c35');
+    context.beginPath();
+    context.arc(centerX, centerY, 12, 0, Math.PI * 2);
+    context.fillStyle = glow;
+    context.shadowColor = '#ffb735';
+    context.shadowBlur = 25;
+    context.fill();
+    context.shadowBlur = 0;
+
+    // Eine Erdumlaufbahn entspricht im Modell einer Animationssekunde.
+    // Alle anderen Winkel ergeben sich aus ihren echten Umlaufzeiten in Erdtagen.
+    planets.forEach((planet, index) => {
+      const radius = orbitRadius(planet);
+      const x = centerX + Math.cos(angles[index]) * radius;
+      const y = centerY + Math.sin(angles[index]) * radius;
+      context.beginPath();
+      context.arc(x, y, planet.size, 0, Math.PI * 2);
+      context.fillStyle = planet.color;
+      context.shadowColor = planet.color;
+      context.shadowBlur = 10;
+      context.fill();
+      context.shadowBlur = 0;
+      if (radius > 35) {
+        context.font = '11px system-ui, sans-serif';
+        context.fillStyle = '#dce8ff';
+        context.fillText(planet.name, x + planet.size + 3, y - planet.size - 2);
+      }
+      if (!isPaused) angles[index] += delta * speed * 2 * Math.PI * 365.25 / planet.days;
+    });
+    requestAnimationFrame(drawScene);
+  }
+
+  speedSlider.addEventListener('input', () => {
+    speedValue.value = `${Number(speedSlider.value).toFixed(1).replace('.', ',')}×`;
+  });
+  pauseButton.addEventListener('click', () => {
+    isPaused = !isPaused;
+    pauseButton.textContent = isPaused ? '▶ Weiter' : '⏸ Pause';
+  });
+  document.querySelector('#resetButton').addEventListener('click', () => {
+    speedSlider.value = 1;
+    speedValue.value = '1,0×';
+    angles = planets.map((_, index) => index * 0.82);
+    isPaused = false;
+    pauseButton.textContent = '⏸ Pause';
+  });
+  window.addEventListener('resize', resizeCanvas);
+  resizeCanvas();
+  requestAnimationFrame(drawScene);
+</script>
+</body>
+</html>
